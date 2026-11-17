@@ -1,0 +1,12 @@
+{
+  "projects": {
+    "default": "homestock-446ce"
+  },
+  "targets": {
+    "homestock-446ce": {
+      "storage": {
+        "products": ["homestock-446ce.firebasestorage.app"]
+      }
+    }
+  }
+}

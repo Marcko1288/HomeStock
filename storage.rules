@@ -1,8 +1,23 @@
 rules_version = '2';
+
+// HomeStock — foto prodotti in users/{uid}/products/{file}
 service firebase.storage {
   match /b/{bucket}/o {
-    match /users/{userId}/{allPaths=**} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+
+    function isOwner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    match /users/{uid}/products/{fileName} {
+      allow read, delete: if isOwner(uid);
+      allow create, update: if isOwner(uid)
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    // Eventuali file caricati in passato in altri percorsi: lettura e pulizia.
+    match /users/{uid}/{allPaths=**} {
+      allow read, delete: if isOwner(uid);
     }
   }
 }
