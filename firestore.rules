@@ -1,8 +1,86 @@
 rules_version = '2';
+
+// HomeStock — ogni utente accede solo ai propri dati in users/{uid}/...
+// La validazione controlla il tipo dei campi noti solo quando sono presenti,
+// così i documenti esistenti (anche con campi extra) restano modificabili.
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /users/{userId}/{document=**} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+
+    function isOwner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    function optString(d, k, max) {
+      return !(k in d) || (d[k] is string && d[k].size() <= max);
+    }
+
+    function optNumber(d, k) {
+      return !(k in d) || (d[k] is number && d[k] >= 0);
+    }
+
+    function optBool(d, k) {
+      return !(k in d) || d[k] is bool;
+    }
+
+    function validName(d) {
+      return !('name' in d) || (d.name is string && d.name.size() > 0 && d.name.size() <= 200);
+    }
+
+    function validProduct(d) {
+      return validName(d)
+        && optNumber(d, 'quantity')
+        && optNumber(d, 'minQuantity')
+        && optNumber(d, 'minPrice')
+        && optString(d, 'barcode', 64)
+        && optString(d, 'unit', 16)
+        && optString(d, 'location', 60)
+        && optString(d, 'category', 60)
+        && optString(d, 'imageUrl', 2048)
+        && optString(d, 'imagePath', 512)
+        && optString(d, 'expiryDate', 10);
+    }
+
+    function validShoppingItem(d) {
+      return validName(d)
+        && optNumber(d, 'quantity')
+        && optString(d, 'barcode', 64)
+        && optString(d, 'unit', 16)
+        && optString(d, 'category', 60)
+        && optString(d, 'imageUrl', 2048)
+        && optBool(d, 'checked');
+    }
+
+    function validSettings(d) {
+      return (!('locations' in d) || (d.locations is list && d.locations.size() <= 20))
+        && (!('categories' in d) || (d.categories is list && d.categories.size() <= 60))
+        && optNumber(d, 'defaultMinQuantity')
+        && (!('expiringDays' in d) || (d.expiringDays is int && d.expiringDays >= 1 && d.expiringDays <= 60));
+    }
+
+    match /users/{uid} {
+      allow read, write: if isOwner(uid);
+
+      match /inventory/{id} {
+        allow read, delete: if isOwner(uid);
+        allow create: if isOwner(uid)
+          && request.resource.data.name is string
+          && request.resource.data.quantity is number
+          && validProduct(request.resource.data);
+        allow update: if isOwner(uid) && validProduct(request.resource.data);
+      }
+
+      match /shoppingList/{id} {
+        allow read, delete: if isOwner(uid);
+        allow create: if isOwner(uid)
+          && request.resource.data.name is string
+          && validShoppingItem(request.resource.data);
+        allow update: if isOwner(uid) && validShoppingItem(request.resource.data);
+      }
+
+      match /settings/{id} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && validSettings(request.resource.data);
+      }
     }
   }
 }
